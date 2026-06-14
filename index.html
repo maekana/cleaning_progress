@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#1D9E75">
+<title>お掃除進捗管理</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg-page: #FAFAF8;
+    --bg-card: #FFFFFF;
+    --bg-secondary: #F1EFE8;
+    --border: rgba(0,0,0,0.12);
+    --border-strong: rgba(0,0,0,0.2);
+    --text-primary: #1A1A18;
+    --text-secondary: #5F5E5A;
+    --text-tertiary: #888780;
+    --success-bg: #E1F5EE;
+    --success-text: #085041;
+    --success-border: #5DCAA5;
+    --danger-text: #993C1D;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-page: #1A1A18;
+      --bg-card: #242422;
+      --bg-secondary: #2C2C2A;
+      --border: rgba(255,255,255,0.12);
+      --border-strong: rgba(255,255,255,0.2);
+      --text-primary: #F1EFE8;
+      --text-secondary: #B4B2A9;
+      --text-tertiary: #888780;
+      --success-bg: #04342C;
+      --success-text: #9FE1CB;
+      --success-border: #0F6E56;
+      --danger-text: #F0997B;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg-page);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", "Helvetica Neue", Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .app {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 1.25rem 1rem 3rem;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+  input, select, button {
+    font-family: inherit;
+    font-size: 14px;
+    border-radius: var(--radius-md);
+    border: 0.5px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    padding: 8px 10px;
+    height: 38px;
+  }
+  input:focus, select:focus {
+    outline: none;
+    border-color: var(--success-border);
+    box-shadow: 0 0 0 2px rgba(93,202,165,0.25);
+  }
+  button {
+    cursor: pointer;
+    border-color: var(--border-strong);
+    transition: background 0.12s, transform 0.08s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:hover { background: var(--bg-secondary); }
+  button:active { transform: scale(0.97); }
+
+  .filter-bar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 1rem;
+    overflow-x: auto;
+  }
+  .filter-btn {
+    font-size: 13px;
+    padding: 6px 12px;
+    height: auto;
+    white-space: nowrap;
+  }
+  .filter-btn.active {
+    background: var(--success-bg);
+    border-color: var(--success-border);
+    color: var(--success-text);
+  }
+
+  .top-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+  }
+  .top-bar select { min-width: 110px; }
+  .top-bar input { flex: 1; min-width: 100px; }
+  .top-bar button { white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+
+  .genre-block {
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 10px;
+    overflow: hidden;
+    background: var(--bg-card);
+  }
+  .genre-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 14px;
+    cursor: pointer;
+    user-select: none;
+    background: var(--bg-secondary);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .genre-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .genre-meta {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .chevron {
+    font-size: 16px;
+    color: var(--text-tertiary);
+    transition: transform 0.2s;
+    display: inline-block;
+  }
+  .genre-body {
+    border-top: 0.5px solid var(--border);
+  }
+  .genre-body.collapsed { display: none; }
+  .spot-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 0.5px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .spot-row:last-child { border-bottom: none; }
+  .spot-name {
+    flex: 1;
+    font-size: 14px;
+    min-width: 90px;
+  }
+  .date-chip {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 100px;
+  }
+  .date-chip.done { color: var(--success-text); }
+  .done-btn {
+    font-size: 12px;
+    padding: 5px 11px;
+    height: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+  .done-btn.completed {
+    background: var(--success-bg);
+    border-color: var(--success-border);
+    color: var(--success-text);
+  }
+  .del-icon {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 16px;
+    padding: 0;
+    opacity: 0.5;
+    line-height: 1;
+    height: auto;
+    width: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .del-icon:hover { opacity: 1; color: var(--danger-text); background: none; }
+
+  .add-genre-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 1.25rem;
+  }
+  .add-genre-row input { flex: 1; }
+  .add-genre-row button { white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+
+  .empty-msg {
+    padding: 1.5rem;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-tertiary);
+  }
+
+  /* Tabler icons */
+  .ti { font-family: 'tabler-icons'; font-style: normal; font-size: 16px; line-height: 1; }
+</style>
+<style id="tabler-fallback">
+  /* シンプルなアイコン代替（オフライン時のフォント未取得対応） */
+  .ti::before { content: ''; display: inline-block; width: 1em; height: 1em; }
+  .ti-broom::before { content: '🧹'; font-family: initial; }
+  .ti-check::before { content: '✓'; font-family: initial; font-weight: bold; }
+  .ti-x::before { content: '×'; font-family: initial; font-weight: bold; font-size: 1.1em; }
+  .ti-trash::before { content: '🗑'; font-family: initial; font-size: 0.9em; }
+  .ti-folder::before { content: '📁'; font-family: initial; font-size: 0.95em; }
+  .ti-folder-plus::before { content: '📁+'; font-family: initial; font-size: 0.85em; }
+  .ti-calendar::before { content: '📅'; font-family: initial; font-size: 0.9em; }
+  .ti-calendar-check::before { content: '📅✓'; font-family: initial; font-size: 0.85em; }
+  .ti-chevron-down::before { content: '▾'; font-family: initial; }
+  .ti-sparkles::before { content: '✨'; font-family: initial; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>
+    <i class="ti ti-broom" aria-hidden="true"></i>お掃除進捗管理
+    <span id="sync-status" style="font-size:11px; font-weight:400; color:var(--text-tertiary); margin-left:auto;"></span>
+  </h1>
+
+  <div class="filter-bar" id="filter-bar">
+    <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">すべて</button>
+    <button class="filter-btn" data-filter="done" onclick="setFilter('done')">完了のみ</button>
+    <button class="filter-btn" data-filter="undone" onclick="setFilter('undone')">未完了のみ</button>
+  </div>
+
+  <div class="top-bar">
+    <select id="genre-select"></select>
+    <input type="text" id="spot-input" placeholder="カテゴリ名を入力">
+    <button onclick="addSpot()"><i class="ti ti-x" style="display:none" aria-hidden="true"></i>追加</button>
+  </div>
+
+  <div id="list-root"></div>
+
+  <div class="add-genre-row">
+    <input type="text" id="genre-input" placeholder="新しいジャンルを追加">
+    <button onclick="addGenre()"><i class="ti ti-folder-plus" aria-hidden="true"></i>ジャンル追加</button>
+  </div>
+</div>
+
+<script>
+// ===== Supabase設定 =====
+const SUPABASE_URL = 'https://jxvlkzlhzxgbstfimurq.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dmxremxoenhnYnN0ZmltdXJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MjI1MzgsImV4cCI6MjA5Njk5ODUzOH0.nHN6WQmptUTJuz5K-UI4-jshuSYhqx0y3iiuwd_5dVY';
+const TABLE = 'cleaning_progress';
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const SK = 'cleaning_progress_data_v1'; // オフライン用ローカルキャッシュ
+let currentFilter = 'all';
+let syncing = false;
+
+function loadData() {
+  try {
+    const r = localStorage.getItem(SK);
+    return r ? JSON.parse(r) : defaults();
+  } catch { return defaults(); }
+}
+
+function defaults() {
+  return [
+    { id: 'g1', name: 'カーテン', open: true, spots: [
+      { id: 's1', name: '寝室のカーテン', doneAt: null },
+      { id: 's2', name: 'リビングのカーテン', doneAt: null },
+    ]},
+    { id: 'g2', name: 'キッチン', open: true, spots: [
+      { id: 's3', name: 'コンロ周り', doneAt: null },
+      { id: 's4', name: 'シンク', doneAt: null },
+      { id: 's5', name: '換気扇', doneAt: null },
+    ]},
+    { id: 'g3', name: 'リビング', open: true, spots: [
+      { id: 's6', name: 'フローリング', doneAt: null },
+      { id: 's7', name: 'テレビ周り', doneAt: null },
+    ]},
+  ];
+}
+
+let data = loadData();
+let gidCounter = 100, sidCounter = 1000;
+data.forEach(g => {
+  const gn = parseInt(g.id.slice(1));
+  if (!isNaN(gn)) gidCounter = Math.max(gidCounter, gn + 1);
+  g.spots.forEach(s => {
+    const sn = parseInt(s.id.slice(1));
+    if (!isNaN(sn)) sidCounter = Math.max(sidCounter, sn + 1);
+  });
+});
+
+function saveLocal() {
+  try { localStorage.setItem(SK, JSON.stringify(data)); } catch {}
+}
+
+// ===== Supabase同期 =====
+// フラット行形式: id = `${genreId}__${spotId}`
+function toRows() {
+  const rows = [];
+  data.forEach((g, gi) => {
+    if (!g.spots.length) {
+      rows.push({
+        id: `${g.id}__`,
+        genre_id: g.id,
+        genre_name: g.name,
+        genre_open: g.open,
+        spot_id: '',
+        spot_name: '',
+        done_at: null,
+        sort_order: gi,
+        updated_at: new Date().toISOString(),
+      });
+      return;
+    }
+    g.spots.forEach((s, si) => {
+      rows.push({
+        id: `${g.id}__${s.id}`,
+        genre_id: g.id,
+        genre_name: g.name,
+        genre_open: g.open,
+        spot_id: s.id,
+        spot_name: s.name,
+        done_at: s.doneAt,
+        sort_order: gi * 1000 + si,
+        updated_at: new Date().toISOString(),
+      });
+    });
+  });
+  return rows;
+}
+
+function fromRows(rows) {
+  const genreMap = new Map();
+  rows
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .forEach(r => {
+      if (!genreMap.has(r.genre_id)) {
+        genreMap.set(r.genre_id, { id: r.genre_id, name: r.genre_name, open: r.genre_open, spots: [] });
+      }
+      const g = genreMap.get(r.genre_id);
+      if (r.spot_id) {
+        g.spots.push({ id: r.spot_id, name: r.spot_name, doneAt: r.done_at });
+      }
+    });
+  return Array.from(genreMap.values());
+}
+
+async function pullFromCloud() {
+  const statusEl = document.getElementById('sync-status');
+  try {
+    statusEl.textContent = '同期中…';
+    const { data: rows, error } = await supabase.from(TABLE).select('*');
+    if (error) throw error;
+    if (rows && rows.length > 0) {
+      data = fromRows(rows);
+      data.forEach(g => {
+        const gn = parseInt(g.id.replace(/^g/, ''));
+        if (!isNaN(gn)) gidCounter = Math.max(gidCounter, gn + 1);
+        g.spots.forEach(s => {
+          const sn = parseInt(s.id.replace(/^s/, ''));
+          if (!isNaN(sn)) sidCounter = Math.max(sidCounter, sn + 1);
+        });
+      });
+      saveLocal();
+      render();
+    } else if (data.length > 0) {
+      await pushToCloud();
+    }
+    statusEl.textContent = '同期済み';
+    setTimeout(() => { if (statusEl.textContent === '同期済み') statusEl.textContent = ''; }, 2000);
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = 'オフライン（ローカル保存のみ）';
+  }
+}
+
+async function pushToCloud() {
+  if (syncing) return;
+  syncing = true;
+  const statusEl = document.getElementById('sync-status');
+  try {
+    statusEl.textContent = '保存中…';
+    const rows = toRows();
+    const currentIds = new Set(rows.map(r => r.id));
+
+    const { data: existingRows, error: fetchErr } = await supabase.from(TABLE).select('id');
+    if (fetchErr) throw fetchErr;
+
+    const idsToDelete = (existingRows || [])
+      .map(r => r.id)
+      .filter(id => !currentIds.has(id));
+
+    if (idsToDelete.length > 0) {
+      const { error: delErr } = await supabase.from(TABLE).delete().in('id', idsToDelete);
+      if (delErr) throw delErr;
+    }
+
+    if (rows.length > 0) {
+      const { error: upsertErr } = await supabase.from(TABLE).upsert(rows, { onConflict: 'id' });
+      if (upsertErr) throw upsertErr;
+    }
+
+    statusEl.textContent = '同期済み';
+    setTimeout(() => { if (statusEl.textContent === '同期済み') statusEl.textContent = ''; }, 2000);
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = 'オフライン（ローカル保存のみ）';
+  } finally {
+    syncing = false;
+  }
+}
+
+function save() {
+  saveLocal();
+  pushToCloud();
+}
+
+function fmt(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === f);
+  });
+  render();
+}
+
+function toggleGenre(id) {
+  const g = data.find(x => x.id === id);
+  if (g) { g.open = !g.open; save(); render(); }
+}
+
+function markDone(gid, sid) {
+  const g = data.find(x => x.id === gid);
+  if (!g) return;
+  const s = g.spots.find(x => x.id === sid);
+  if (s) { s.doneAt = new Date().toISOString(); save(); render(); }
+}
+
+function deleteSpot(gid, sid) {
+  const g = data.find(x => x.id === gid);
+  if (!g) return;
+  g.spots = g.spots.filter(x => x.id !== sid);
+  save(); render();
+}
+
+function deleteGenre(gid) {
+  data = data.filter(x => x.id !== gid);
+  save(); render(); refreshSelect();
+}
+
+function addSpot() {
+  const input = document.getElementById('spot-input');
+  const name = input.value.trim();
+  const gid = document.getElementById('genre-select').value;
+  if (!name || !gid) return;
+  const g = data.find(x => x.id === gid);
+  if (!g) return;
+  g.spots.push({ id: 's' + (sidCounter++), name, doneAt: null });
+  input.value = '';
+  save(); render();
+}
+
+function addGenre() {
+  const input = document.getElementById('genre-input');
+  const name = input.value.trim();
+  if (!name) return;
+  data.push({ id: 'g' + (gidCounter++), name, open: true, spots: [] });
+  input.value = '';
+  save(); render(); refreshSelect();
+}
+
+function refreshSelect() {
+  const sel = document.getElementById('genre-select');
+  const prev = sel.value;
+  sel.innerHTML = data.map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+  if (data.find(x => x.id === prev)) sel.value = prev;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function render() {
+  const root = document.getElementById('list-root');
+  if (!data.length) {
+    root.innerHTML = '<div class="empty-msg"><i class="ti ti-sparkles" style="font-size:22px;display:block;margin-bottom:8px" aria-hidden="true"></i>ジャンルを追加してください</div>';
+    return;
+  }
+
+  let html = '';
+  data.forEach(g => {
+    const visibleSpots = g.spots.filter(s => {
+      if (currentFilter === 'done') return !!s.doneAt;
+      if (currentFilter === 'undone') return !s.doneAt;
+      return true;
+    });
+
+    if (currentFilter !== 'all' && visibleSpots.length === 0) return;
+
+    const total = g.spots.length;
+    const done = g.spots.filter(s => s.doneAt).length;
+
+    const rows = visibleSpots.map(s => {
+      const hasDone = !!s.doneAt;
+      return `<div class="spot-row">
+        <span class="spot-name">${escapeHtml(s.name)}</span>
+        <span class="date-chip ${hasDone ? 'done' : ''}">
+          <i class="ti ti-calendar${hasDone ? '-check' : ''}" aria-hidden="true"></i>
+          ${hasDone ? fmt(s.doneAt) : '未完了'}
+        </span>
+        <button class="done-btn ${hasDone ? 'completed' : ''}" onclick="markDone('${g.id}','${s.id}')">
+          <i class="ti ti-${hasDone ? 'check' : 'broom'}" aria-hidden="true"></i>${hasDone ? '更新' : '完了'}
+        </button>
+        <button class="del-icon" onclick="deleteSpot('${g.id}','${s.id}')" aria-label="削除"><i class="ti ti-x" aria-hidden="true"></i></button>
+      </div>`;
+    }).join('') || `<div class="empty-msg">${currentFilter === 'done' ? '完了済みの項目はありません' : currentFilter === 'undone' ? '未完了の項目はありません' : 'カテゴリがありません'}</div>`;
+
+    html += `<div class="genre-block">
+      <div class="genre-header" onclick="toggleGenre('${g.id}')">
+        <span class="genre-title">
+          <i class="ti ti-folder" aria-hidden="true"></i>${escapeHtml(g.name)}
+        </span>
+        <span class="genre-meta">
+          ${done}/${total} 完了
+          <button class="del-icon" onclick="event.stopPropagation();deleteGenre('${g.id}')" aria-label="ジャンル削除" style="opacity:0.4"><i class="ti ti-trash" aria-hidden="true"></i></button>
+          <i class="ti ti-chevron-down chevron" style="transform:rotate(${g.open ? '180deg' : '0deg'})" aria-hidden="true"></i>
+        </span>
+      </div>
+      <div class="genre-body ${g.open ? '' : 'collapsed'}">${rows}</div>
+    </div>`;
+  });
+
+  root.innerHTML = html || '<div class="empty-msg">表示できる項目がありません</div>';
+  refreshSelect();
+}
+
+document.getElementById('spot-input').addEventListener('keydown', e => { if (e.key === 'Enter') addSpot(); });
+document.getElementById('genre-input').addEventListener('keydown', e => { if (e.key === 'Enter') addGenre(); });
+
+render();
+pullFromCloud();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
