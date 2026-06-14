@@ -276,7 +276,7 @@ const SUPABASE_URL = 'https://jxvlkzlhzxgbstfimurq.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dmxremxoenhnYnN0ZmltdXJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MjI1MzgsImV4cCI6MjA5Njk5ODUzOH0.nHN6WQmptUTJuz5K-UI4-jshuSYhqx0y3iiuwd_5dVY';
 const TABLE = 'cleaning_progress';
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const SK = 'cleaning_progress_data_v1'; // オフライン用ローカルキャッシュ
 let currentFilter = 'all';
@@ -378,7 +378,7 @@ async function pullFromCloud() {
   const statusEl = document.getElementById('sync-status');
   try {
     statusEl.textContent = '同期中…';
-    const { data: rows, error } = await supabase.from(TABLE).select('*');
+    const { data: rows, error } = await supabaseClient.from(TABLE).select('*');
     if (error) throw error;
     if (rows && rows.length > 0) {
       data = fromRows(rows);
@@ -412,7 +412,7 @@ async function pushToCloud() {
     const rows = toRows();
     const currentIds = new Set(rows.map(r => r.id));
 
-    const { data: existingRows, error: fetchErr } = await supabase.from(TABLE).select('id');
+    const { data: existingRows, error: fetchErr } = await supabaseClient.from(TABLE).select('id');
     if (fetchErr) throw fetchErr;
 
     const idsToDelete = (existingRows || [])
@@ -420,12 +420,12 @@ async function pushToCloud() {
       .filter(id => !currentIds.has(id));
 
     if (idsToDelete.length > 0) {
-      const { error: delErr } = await supabase.from(TABLE).delete().in('id', idsToDelete);
+      const { error: delErr } = await supabaseClient.from(TABLE).delete().in('id', idsToDelete);
       if (delErr) throw delErr;
     }
 
     if (rows.length > 0) {
-      const { error: upsertErr } = await supabase.from(TABLE).upsert(rows, { onConflict: 'id' });
+      const { error: upsertErr } = await supabaseClient.from(TABLE).upsert(rows, { onConflict: 'id' });
       if (upsertErr) throw upsertErr;
     }
 
